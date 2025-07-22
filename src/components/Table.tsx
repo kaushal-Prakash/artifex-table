@@ -31,7 +31,9 @@ const Table: React.FC = () => {
   //set selected rows based on initial selected ids
   useEffect(() => {
     if (isInitialized && data.length > 0 && initialSelectedIds.length > 0) {
-      const matchedRows = data.filter(row => initialSelectedIds.includes(row.id));
+      const matchedRows = data.filter((row) =>
+        initialSelectedIds.includes(row.id)
+      );
       setSelectedRows(matchedRows);
     }
   }, [data, initialSelectedIds, isInitialized]);
@@ -40,9 +42,9 @@ const Table: React.FC = () => {
   const handleSelectionChange = (e: { value: RowData[] }) => {
     const newSelectedRows = e.value;
     setSelectedRows(newSelectedRows);
-    
+
     // update localStorage
-    const idsToStore = newSelectedRows.map(row => row.id);
+    const idsToStore = newSelectedRows.map((row) => row.id);
     localStorage.setItem(store, JSON.stringify(idsToStore));
   };
 
