@@ -1,26 +1,24 @@
-# Advanced React DataTable with Persistent Selections
+# Advanced React DataTable: Server-Side Pagination & Persistent Selection
 
-This project is a sophisticated React application demonstrating advanced features of the PrimeReact `DataTable` component. It showcases how to build a responsive, server-side paginated table with persistent row selection that works across multiple pages and browser sessions, all while fetching live data from the Art Institute of Chicago API.
+This project is a feature-rich React application built with TypeScript, demonstrating a highly advanced implementation of the PrimeReact `DataTable`. It serves as a powerful example of how to handle large datasets efficiently by integrating server-side pagination with persistent, cross-page row selection, all powered by live data from the Art Institute of Chicago API.
 
-## ✨ Features
+## ✨ Key Features
 
-  * **Server-Side Pagination**: Efficiently handles thousands of records by fetching data one page at a time. The paginator is fully controlled and state-driven.
-  * **Persistent Row Selection**: User selections are saved to `localStorage` and restored automatically on page load. This allows selections to persist even after the browser tab is closed.
-  * **Cross-Page Selection**: A robust system manages selections across all pages, not just the currently visible one. The total count of selected items is always displayed.
-  * **"Select First N" Functionality**: A powerful feature allowing the user to programmatically select the first 'N' records from the entire dataset, fetching data from multiple pages if necessary.
-  * **Custom Header UI**: The selection column header features a custom popup menu, built with `OverlayPanel`, for a clean and modern user experience.
-  * **Dynamic Theming**: The project is set up with PrimeReact themes and icons for a polished look and feel out of the box.
-
------
+  * **Server-Side Pagination**: Handles massive datasets by fetching data one page at a time. The paginator is fully controlled by React state and updates data on demand.
+  * **Persistent Cross-Page Selection**: User selections are saved to `localStorage` and restored automatically on page load. The application maintains a single source of truth for all selected items, regardless of the currently viewed page.
+  * **"Select First N" Functionality**: A powerful utility that allows the user to programmatically select the first 'N' records starting from their current page view, fetching data from subsequent pages if necessary.
+  * **Custom UI Components**: The "Select First N" feature is triggered by a clean, non-intrusive `OverlayPanel` popup, launched from a custom icon button in the table header.
+  * **Robust State Management**: Uses a combination of `useState`, `useEffect`, and `useRef` to manage data, selection state, UI state, and asynchronous operations cleanly and efficiently.
+  * **Modern Tech Stack**: Built with React, TypeScript, and the latest PrimeReact components for a polished and professional result.
 
 ## 🛠️ Technologies Used
 
   * **Framework**: React
   * **Language**: TypeScript
-  * **UI Library**: PrimeReact (`DataTable`, `Button`, `OverlayPanel`, etc.)
+  * **UI Library**: PrimeReact (`DataTable`, `Column`, `Button`, `OverlayPanel`, `InputText`)
   * **Styling**: PrimeFlex, PrimeIcons, and a PrimeReact Theme (e.g., `lara-light-indigo`)
   * **Icons**: Lucide React
-  * **API Client**: Axios
+  * **API Client**: Axios (used within the API utility)
   * **Data Source**: [Art Institute of Chicago API](https://api.artic.edu/docs/)
 
 -----
@@ -31,11 +29,11 @@ To get a local copy up and running, follow these simple steps.
 
 ### Prerequisites
 
-You need to have Node.js and npm (or yarn) installed on your machine.
+You must have Node.js (version 16 or later) and npm (or yarn) installed on your machine.
 
 ### Installation
 
-1.  **Clone the repo**
+1.  **Clone the repository**
     ```sh
     git clone https://github.com/your-username/your-repository-name.git
     ```
@@ -51,23 +49,31 @@ You need to have Node.js and npm (or yarn) installed on your machine.
     ```sh
     npm start
     ```
-    The application will be running on `http://localhost:3000`.
+    The application will open in your browser at `http://localhost:3000`.
 
 -----
 
 ## 🧠 Core Logic Explained
 
-The most complex feature is the persistent, cross-page selection. Here’s how it works:
+The power of this application lies in how it manages the selection state across different pages and sessions.
 
-1.  **Centralized ID Storage**: Instead of storing the full row objects, we only store the unique IDs of the selected rows. A JavaScript `Set` (`selectedRowIds`) is used for this, as it provides highly efficient `add`, `delete`, and `has` operations, preventing duplicate IDs.
+### The "Single Source of Truth" Model for Selection
 
-2.  **Saving to `localStorage`**: A `useEffect` hook watches the `selectedRowIds` set. Whenever the set changes (a user selects or deselects a row), the hook converts the set to an array, serializes it to a JSON string, and saves it to `localStorage`.
+Instead of tracking an array of selected row *objects*, which would only work for the current page, we use a single `Set` to store the unique **IDs** of every selected item across the entire dataset.
 
-3.  **Loading from `localStorage`**: On initial component mount, another `useEffect` hook reads the JSON string from `localStorage`, parses it, and populates the `selectedRowIds` set. This restores the user's previous session.
+  * `selectedRowIds: Set<string>`: This state variable is the master list and our "single source of truth". Using a `Set` provides highly efficient O(1) time complexity for adding, deleting, and checking for the existence of an ID.
 
-4.  **Syncing UI with State**: The `DataTable`'s `selection` prop cannot be bound directly to the `selectedRowIds` set, as it needs an array of *full row objects* for the *current page*.
+The selection lifecycle works in three stages:
 
-      * A helper function, `getSelectedRowsForCurrentPage()`, filters the `data` of the current page against the master `selectedRowIds` set.
-      * The result of this function is passed to the `selection` prop, ensuring only the checkboxes for visible, selected rows are ticked.
+1.  **Loading**: On initial component mount, a `useEffect` hook reads a JSON array of IDs from `localStorage` and hydrates the `selectedRowIds` set. This restores the user's previous session.
+2.  **Displaying**: The `DataTable`'s `selection` prop cannot use the master set of IDs directly; it needs an array of full row objects that are currently visible. A helper function, `getSelectedRowsForCurrentPage()`, creates this array on every render by filtering the current page's `data` against the `selectedRowIds` set.
+3.  **Updating**: When a user checks or unchecks a box, the `handleSelectionChange` function is triggered. It intelligently merges the selection changes from the current page into the master `selectedRowIds` set without affecting selections on other pages. A separate `useEffect` hook then watches for changes to this master set and automatically saves the updated IDs back to `localStorage`.
 
-5.  **Handling Selection Changes**: The `onSelectionChange` handler is carefully crafted to update the master `selectedRowIds` set. It compares the new selection on the current page with the existing data to determine which IDs to add or remove from the master set, ensuring selections on other pages are not affected.
+### Asynchronous "Select First N" Logic
+
+The `selectNRows` function is an `async` function that demonstrates how to handle complex user actions:
+
+  * It first calculates how many items can be selected from the currently loaded page data.
+  * If the user requests more items than are available on the current page, it enters a `while` loop.
+  * Inside the loop, it sequentially fetches the next pages of data until the desired number of selections has been met or it runs out of pages.
+  * A `isFetching` state variable is used to disable the UI during this potentially long-running operation, providing clear feedback to the user.
