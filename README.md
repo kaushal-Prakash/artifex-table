@@ -49,7 +49,7 @@ You must have Node.js (version 16 or later) and npm (or yarn) installed on your 
     ```sh
     npm start
     ```
-    The application will open in your browser at `http://localhost:3000`.
+    The application will open in your browser at `http://localhost:3000](http://localhost:5173/`.
 
 -----
 
