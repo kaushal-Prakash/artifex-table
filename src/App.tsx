@@ -1,9 +1,14 @@
-import './App.css'
+import "./App.css";
+import Header from "./components/Header";
+import Table from "./components/Table";
 
 function App() {
   return (
-    <div> Hello</div>
-  )
+    <div>
+      <Header/>
+      <Table />
+    </div>
+  );
 }
 
-export default App
+export default App;
