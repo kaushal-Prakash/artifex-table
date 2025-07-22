@@ -1,5 +1,5 @@
 export interface RowData {
-  id: number;
+  id: string;
   title: string;
   place_of_origin: string;
   artist_display: string;
