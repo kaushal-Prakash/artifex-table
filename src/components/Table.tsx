@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { DataTable, type DataTableStateEvent } from "primereact/datatable";
 import { Column } from "primereact/column";
-import { InputNumber } from "primereact/inputnumber";
+import { InputText } from "primereact/inputtext";
 import { Button } from "primereact/button";
+import { OverlayPanel } from "primereact/overlaypanel";
 import type { RowData } from "../types/TableData";
 import { fetchRows, totalPages } from "../utils/artic";
+import { ChevronDown } from "lucide-react";
 
 const store = "selected-ids";
 
@@ -14,11 +16,12 @@ const Table: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [data, setData] = useState<RowData[]>([]);
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
-  const [rowsToSelect, setRowsToSelect] = useState<number>(0);
+  const [rowsToSelect, setRowsToSelect] = useState("");
   const [isFetching, setisFetching] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  //get stored ids
+  const op = useRef<OverlayPanel>(null);
+
   useEffect(() => {
     const savedIds = localStorage.getItem(store);
     if (savedIds) {
@@ -26,13 +29,12 @@ const Table: React.FC = () => {
         const idsArray = JSON.parse(savedIds);
         setSelectedRowIds(new Set(idsArray));
       } catch (e) {
-        console.error("Failed to parse saved IDs", e);
+        console.error("failed to get saved ids", e);
       }
     }
     setIsInitialized(true);
   }, []);
 
-  // fetching data when page changes
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -43,55 +45,64 @@ const Table: React.FC = () => {
         setData(rowsData);
         setTotal(totalPagesData);
       } catch (err) {
-        console.error("Error fetching data:", err);
+        console.error("error fetching data:", err);
       }
     };
 
     loadData();
   }, [page]);
 
-  // update stored ids in local storage
   useEffect(() => {
     if (isInitialized) {
       localStorage.setItem(store, JSON.stringify(Array.from(selectedRowIds)));
     }
   }, [selectedRowIds, isInitialized]);
 
-  // select first n rowa
   const selectNRows = async () => {
-    if (rowsToSelect <= 0) return;
+    op.current?.hide();
+
+    const num = parseInt(rowsToSelect, 10);
+    if (isNaN(num) || num <= 0) return;
 
     setisFetching(true);
     const newSelectedIds = new Set<string>();
-    let currentPage = 1;
+    let currentPage = page; 
     let totalSelected = 0;
+    let processedCurrentPage = false;
 
     try {
-      // Start with current page if it's page 1
-      if (page === 1) {
-        const selectionSize = Math.min(rowsToSelect, data.length);
-        for (let i = 0; i < selectionSize; i++) {
+      const startIndex = page === 1 ? 0 : first % 7;
+      const availableOnCurrentPage = data.length - startIndex;
+      const toSelectOnCurrentPage = Math.min(num, availableOnCurrentPage);
+
+      for (let i = startIndex; i < startIndex + toSelectOnCurrentPage; i++) {
+        if (data[i]) {
           newSelectedIds.add(data[i].id);
         }
-        totalSelected = selectionSize;
       }
+      totalSelected += toSelectOnCurrentPage;
+      processedCurrentPage = true;
 
-      // Fetch additional pages if needed
-      while (totalSelected < rowsToSelect && currentPage * 7 < total) {
+      while (totalSelected < num && currentPage * 7 < total) {
+        if (processedCurrentPage) {
+          currentPage++;
+        } else {
+          processedCurrentPage = true;
+        }
+
         const pageData = await fetchRows(currentPage);
-        const remainingToSelect = rowsToSelect - totalSelected;
+        const remainingToSelect = num - totalSelected;
         const selectionSize = Math.min(remainingToSelect, pageData.length);
 
         for (let i = 0; i < selectionSize; i++) {
           newSelectedIds.add(pageData[i].id);
         }
         totalSelected += selectionSize;
-        currentPage++;
       }
 
       setSelectedRowIds(newSelectedIds);
     } catch (error) {
-      console.error("Error during selection:", error);
+      console.error("error during selection:", error);
     } finally {
       setisFetching(false);
     }
@@ -104,7 +115,7 @@ const Table: React.FC = () => {
 
   const clearSelections = () => {
     setSelectedRowIds(new Set());
-    setRowsToSelect(0);
+    setRowsToSelect("");
   };
 
   const getSelectedRowsForCurrentPage = () => {
@@ -114,7 +125,6 @@ const Table: React.FC = () => {
   const handleSelectionChange = (e: { value: RowData[] }) => {
     const newSelectedIds = new Set(selectedRowIds);
     const currentPageSelectedIds = new Set(e.value.map((row) => row.id));
-
     data.forEach((row) => {
       if (currentPageSelectedIds.has(row.id)) {
         newSelectedIds.add(row.id);
@@ -122,43 +132,50 @@ const Table: React.FC = () => {
         newSelectedIds.delete(row.id);
       }
     });
-
     setSelectedRowIds(newSelectedIds);
   };
 
+  const customHeader = (
+    <div className="flex align-items-center">
+      <Button
+        type="button"
+        icon={<ChevronDown size={16} />}
+        className="p-button-text p-button-plain"
+        onClick={(e) => op.current?.toggle(e)}
+      />
+    </div>
+  );
+
   return (
     <div className="p-6">
-      <div className="flex align-items-center mb-4 gap-3">
-        <div className="flex align-items-center gap-2">
-          <InputNumber
+      <OverlayPanel ref={op} className="p-2">
+        <div className="flex flex-column gap-2">
+          <InputText
             value={rowsToSelect}
-            onValueChange={(e) => setRowsToSelect(e.value || 0)}
-            min={0}
-            max={total * 7}
-            showButtons
-            buttonLayout="horizontal"
-            mode="decimal"
+            onChange={(e) => setRowsToSelect(e.target.value)}
+            placeholder="Select rows..."
+            className="p-inputtext-sm"
+            type="number"
           />
           <Button
-            label="Select First N Rows"
-            icon="pi pi-check"
+            label="Submit"
             onClick={selectNRows}
-            disabled={rowsToSelect <= 0 || isFetching}
+            disabled={
+              !rowsToSelect || parseInt(rowsToSelect) <= 0 || isFetching
+            }
+            className="p-button-sm"
           />
         </div>
+      </OverlayPanel>
+
+      <div className="flex align-items-center mb-4 gap-3">
         <Button
           label="Clear Selections"
           icon="pi pi-times"
-          className="p-button-danger"
+          className="p-button-danger p-button-sm"
           onClick={clearSelections}
           disabled={selectedRowIds.size === 0}
         />
-        <div className="mt-2">
-          <small>
-            {selectedRowIds.size} {selectedRowIds.size === 1 ? "row" : "rows"}{" "}
-            selected across all pages
-          </small>
-        </div>
       </div>
 
       <DataTable
@@ -178,12 +195,16 @@ const Table: React.FC = () => {
         tableStyle={{ minWidth: "50rem" }}
         onPage={handlePageChange}
       >
-        <Column selectionMode="multiple" headerStyle={{ width: "3rem" }} />
-        <Column field="title" sortable header="Title" />
+        <Column
+          selectionMode="multiple"
+          header={customHeader}
+          headerStyle={{ width: "3rem" }}
+        />
+        <Column field="title" header="Title" />
         <Column field="artist_display" header="Artist" />
         <Column field="place_of_origin" header="Place of Origin" />
         <Column field="inscriptions" header="Inscriptions" />
-        <Column field="date_start" sortable header="Year Start" />
+        <Column field="date_start" header="Year Start" />
         <Column field="date_end" header="Year End" />
       </DataTable>
     </div>
